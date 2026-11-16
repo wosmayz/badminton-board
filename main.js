@@ -418,7 +418,7 @@ document.getElementById('reset-pos').addEventListener('click', () =>
 /* ---------- 截圖：上方名字＋球場（含場外深綠邊），1080 寬 ---------- */
 const APP_NAME = 'Team YE 羽球戰術板';
 const SHOT_W = 1080, SHOT_BOX = [-0.6, -0.6, Board.W + 1.2, Board.L + 1.2];   // 公尺：剛好是場外深綠那一塊
-const SHOT_HEAD = 120;   // 上方名字那一條的高度（像素）
+const SHOT_HEAD = 100;   // 上方名字那一條多加的高度（像素）
 function makeShot() {
   const [x, y, w, h] = SHOT_BOX, H = Math.round(SHOT_W * h / w);
   const src = `<svg xmlns="http://www.w3.org/2000/svg" width="${SHOT_W}" height="${H}" viewBox="${x} ${y} ${w} ${h}">${boardSvg(true)}</svg>`;
@@ -429,11 +429,13 @@ function makeShot() {
       const ctx = cv.getContext('2d');
       ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surround').trim();
       ctx.fillRect(0, 0, SHOT_W, SHOT_HEAD + H);   // 整張底色＝場外深綠，名字放在上面這條
+      ctx.drawImage(img, 0, SHOT_HEAD, SHOT_W, H);   // 先貼球場，名字最後寫才不會被蓋住
       ctx.fillStyle = '#ffffff';
       ctx.font = '700 48px -apple-system, "PingFang TC", "Noto Sans TC", sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(APP_NAME, SHOT_W / 2, SHOT_HEAD / 2 + 14);
-      ctx.drawImage(img, 0, SHOT_HEAD, SHOT_W, H);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      // 名字放在「圖片頂端」到「球場底線（上方白線）」中間；用字的實際上下緣置中
+      const lineTop = SHOT_HEAD + (0 - y) * SHOT_W / w, m = ctx.measureText(APP_NAME);
+      ctx.fillText(APP_NAME, SHOT_W / 2, lineTop / 2 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
       cv.toBlob(b => b ? ok(b) : fail(new Error('toBlob')), 'image/png');
     };
     img.onerror = fail;
@@ -468,7 +470,7 @@ document.getElementById('preview-share').addEventListener('click', async () => {
   const file = shotFile; if (!file) return;
   if (canShareFile(file)) {
     try { await navigator.share({ files: [file] }); }
-    catch (err) { if (err.name !== 'AbortError') alert('分享失敗：可以長按圖片，選「加入照片」'); }   // 自己關掉分享面板不算錯
+    catch (err) { if (err.name !== 'AbortError') alert('分享失敗：可以長按圖片存到相簿'); }   // 自己關掉分享面板不算錯
   } else {
     const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name;
     document.body.appendChild(a); a.click(); a.remove();
