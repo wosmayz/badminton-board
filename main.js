@@ -54,6 +54,7 @@ let dragBefore = null;
 // drag：正在進行中的手指動作
 let sel = null, drag = null;
 const TAP_PX = 6;          // 手指移動超過這麼多像素才算「拖」，不然算「點」
+const ROT_PER_PX = 1.1;     // 斜角畫面：左右拖 1 像素轉幾度（拖約半個螢幕寬＝轉半圈）
 const MIN_ROT = 0.25;      // 手指離中心太近（公尺）時不轉，避免亂跳
 
 const target = () => !sel ? null : sel.kind === 'shuttle' ? scene().shuttle : scene().players.find(p => p.id === sel.id);
@@ -529,7 +530,7 @@ async function ensure3d() {
   if (v3) return v3;
   if (!v3Loading) {
     const tag = document.getElementById('loading3d'); tag.hidden = false;
-    v3Loading = import('./view3d.js?v=10').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
+    v3Loading = import('./view3d.js?v=11').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
       .catch(err => { tag.hidden = true; v3Loading = null; console.error(err); alert('斜角畫面載入失敗，請檢查網路後再試一次'); state.view = 'top'; render(); });
   }
   return v3Loading;
@@ -543,6 +544,8 @@ function bind3d(v) {
   const two = () => { const [a, b] = [...fingers.values()]; return { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), mid: { clientX: (a.clientX + b.clientX) / 2, clientY: (a.clientY + b.clientY) / 2 } }; };
   cv.addEventListener('pointerdown', e => {
     cv.setPointerCapture(e.pointerId);
+    // 第一根手指放下（isPrimary）時，畫面上不可能還有別的手指：清掉殘留紀錄，免得被誤判成兩指縮放
+    if (e.isPrimary) { fingers.clear(); pinch = null; }
     fingers.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
     if (fingers.size === 2) {
       // 第二根手指放下：改成縮放／移動，正在拖的人放回原位
@@ -583,12 +586,11 @@ function bind3d(v) {
       drag3d.obj.x = clamp(g.x + drag3d.ox, -0.2, Board.W + 0.2);
       drag3d.obj.y = clamp(g.y + drag3d.oy, -0.3, Board.L + 0.3);
     } else {
-      // 轉向：從人（羽球）的位置指向手指在地上的位置
-      const t = target(), g = v.groundAt(e, sel.kind === 'shuttle' ? v.hitHeight() : 0); if (!t || !g) return;
-      const dx = g.x - t.x, dy = g.y - t.y;
-      if (Math.hypot(dx, dy) < MIN_ROT) return;
-      const ang = Math.atan2(dx, -dy) * 180 / Math.PI;
-      if (sel.kind === 'shuttle') t.heading = ang; else t.angle = ang;
+      // 轉向：以原本的方向為準，跟著手指左右拖來轉（往右拖＝往右轉）；11/17 她覺得「轉向手指指的方向」在斜角不好控制
+      const t = target(); if (!t) return;
+      const key = sel.kind === 'shuttle' ? 'heading' : 'angle';
+      if (drag3d.a0 == null) drag3d.a0 = t[key];
+      t[key] = drag3d.a0 + (e.clientX - drag3d.sx) * ROT_PER_PX;
     }
     render();
   });
@@ -605,6 +607,7 @@ function bind3d(v) {
     commit(d.before); render();
   };
   cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+  cv.addEventListener('lostpointercapture', e => fingers.delete(e.pointerId));
   // 電腦：滑鼠滾輪縮放
   cv.addEventListener('wheel', e => { e.preventDefault(); v.zoomAt(Math.exp(-e.deltaY * .002), e); placeOverlays(); }, { passive: false });
 }
