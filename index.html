@@ -13,7 +13,8 @@
     location.replace(location.pathname + (location.search ? location.search + '&' : '?') + 'openExternalBrowser=1' + location.hash);
   }
 </script>
-<link rel="stylesheet" href="styles.css?v=5">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/"}}</script>
+<link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
 <div class="app">
@@ -27,6 +28,7 @@
       </div>
     </div>
     <div class="angle-tag" id="angle" hidden></div>
+    <div class="loading" id="loading3d" hidden>載入中…</div>
   </main>
 
   <nav class="rail" aria-label="工具列">
@@ -38,6 +40,10 @@
     <button class="icon-btn" id="undo" data-icon="undo" aria-label="上一步" disabled></button>
     <button class="icon-btn" id="redo" data-icon="redo" aria-label="下一步" disabled></button>
     <div class="spacer"></div>
+    <div class="seg" role="radiogroup" aria-label="視角">
+      <button role="radio" data-view="top" aria-checked="true">俯瞰</button>
+      <button role="radio" data-view="3d" aria-checked="false">斜角</button>
+    </div>
     <div class="seg" role="radiogroup" aria-label="單雙打">
       <button role="radio" data-mode="double" aria-checked="true">雙打</button>
       <button role="radio" data-mode="single" aria-checked="false">單打</button>
@@ -83,7 +89,7 @@
     </div>
   </div>
 </div>
-<script src="board.js?v=5"></script>
-<script src="main.js?v=5"></script>
+<script src="board.js?v=7"></script>
+<script src="main.js?v=7"></script>
 </body>
 </html>

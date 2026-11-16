@@ -20,6 +20,7 @@ function defaultScene(mode) {
 /* 單打、雙打各自保留一份畫面：切回去時原封不動 */
 const state = {
   mode: 'double',
+  view: 'top',           // top＝俯瞰、3d＝斜角
   tool: 'move',
   pop: null,             // 打開中的工具選單：'pen'｜'arrow'｜null
   penColor: 'hl-1',
@@ -83,9 +84,12 @@ function boardSvg(clean) {
 
 function render() {
   svg.innerHTML = boardSvg(false);
+  stage.classList.toggle('is-3d', state.view === '3d');
+  document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-checked', b.dataset.view === state.view));
+  if (state.view === '3d') render3d();
 
   document.querySelectorAll('.tool[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === state.tool));
-  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-checked', b.dataset.mode === state.mode));
+  document.querySelectorAll('.seg [data-mode]').forEach(b => b.setAttribute('aria-checked', b.dataset.mode === state.mode));
   document.getElementById('undo').disabled = !hist().past.length;
   document.getElementById('redo').disabled = !hist().future.length;
   placeOverlays();
@@ -106,6 +110,7 @@ function toBoard(e) {
 
 /* 球員選單、旋轉角度的位置 */
 function placeOverlays() {
+  if (state.view === '3d') { menu.hidden = true; angleTag.hidden = true; return; }
   const t = target(), rotating = drag && drag.type === 'rotate' && drag.started;
   // 選單：選到球員、而且不在旋轉中才出現
   if (t && sel.kind === 'player' && !rotating) {
@@ -381,11 +386,12 @@ document.querySelectorAll('[data-icon]').forEach(el => {
 });
 document.querySelectorAll('.tool[data-tool]').forEach(b => b.addEventListener('click', () => {
   const t = b.dataset.tool, hasPop = t === 'pen' || t === 'arrow';
+  if (t !== 'move' && state.view === '3d') state.view = 'top';   // 畫線、擦線回俯瞰做
   // 換到螢光筆／箭頭時打開選單；已經是這個工具時再按一次＝開關選單
   state.pop = !hasPop ? null : state.tool === t ? (state.pop === t ? null : t) : t;
   state.tool = t; sel = null; render();
 }));
-document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { state.mode = b.dataset.mode; sel = null; render(); }));
+document.querySelectorAll('.seg [data-mode]').forEach(b => b.addEventListener('click', () => { state.mode = b.dataset.mode; sel = null; render(); }));
 document.getElementById('undo').addEventListener('click', () => stepHistory(hist().past, hist().future));
 document.getElementById('redo').addEventListener('click', () => stepHistory(hist().future, hist().past));
 document.getElementById('more').addEventListener('click', () => { state.pop = state.pop === 'more' ? null : 'more'; sel = null; render(); });
@@ -421,23 +427,27 @@ const SHOT_W = 1080, SHOT_BOX = [-0.6, -0.6, Board.W + 1.2, Board.L + 1.2];   //
 const SHOT_HEAD = 100;   // 上方名字那一條多加的高度（像素）
 function makeShot() {
   const [x, y, w, h] = SHOT_BOX, H = Math.round(SHOT_W * h / w);
+  // 把球場圖（俯瞰的 SVG 或斜角的 3D）貼到名字條下面；courtTop＝球場最上面那條白線在圖上的高度
+  const compose = (pic, H = pic.height, courtTop = (0 - y) * SHOT_W / w) => new Promise((ok, fail) => {
+    const cv = document.createElement('canvas'); cv.width = SHOT_W; cv.height = SHOT_HEAD + H;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surround').trim();
+    ctx.fillRect(0, 0, SHOT_W, SHOT_HEAD + H);   // 整張底色＝場外深綠，名字放在上面這條
+    ctx.drawImage(pic, 0, SHOT_HEAD, SHOT_W, H);   // 先貼球場，名字最後寫才不會被蓋住
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 48px -apple-system, "PingFang TC", "Noto Sans TC", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    // 名字放在「圖片頂端」到「球場底線（上方白線）」中間；用字的實際上下緣置中
+    const lineTop = SHOT_HEAD + courtTop, m = ctx.measureText(APP_NAME);
+    ctx.fillText(APP_NAME, SHOT_W / 2, lineTop / 2 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
+    cv.toBlob(b => b ? ok(b) : fail(new Error('toBlob')), 'image/png');
+  });
+  // 斜角畫面：用 3D 重畫一張同樣大小的圖
+  if (state.view === '3d' && v3) { const pic = v3.snapshot(SHOT_W); return compose(pic, pic.height, pic.courtTop); }
   const src = `<svg xmlns="http://www.w3.org/2000/svg" width="${SHOT_W}" height="${H}" viewBox="${x} ${y} ${w} ${h}">${boardSvg(true)}</svg>`;
   return new Promise((ok, fail) => {
     const img = new Image();
-    img.onload = () => {
-      const cv = document.createElement('canvas'); cv.width = SHOT_W; cv.height = SHOT_HEAD + H;
-      const ctx = cv.getContext('2d');
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surround').trim();
-      ctx.fillRect(0, 0, SHOT_W, SHOT_HEAD + H);   // 整張底色＝場外深綠，名字放在上面這條
-      ctx.drawImage(img, 0, SHOT_HEAD, SHOT_W, H);   // 先貼球場，名字最後寫才不會被蓋住
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '700 48px -apple-system, "PingFang TC", "Noto Sans TC", sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-      // 名字放在「圖片頂端」到「球場底線（上方白線）」中間；用字的實際上下緣置中
-      const lineTop = SHOT_HEAD + (0 - y) * SHOT_W / w, m = ctx.measureText(APP_NAME);
-      ctx.fillText(APP_NAME, SHOT_W / 2, lineTop / 2 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
-      cv.toBlob(b => b ? ok(b) : fail(new Error('toBlob')), 'image/png');
-    };
+    img.onload = () => compose(img, H).then(ok, fail);
     img.onerror = fail;
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(src);
   });
@@ -482,6 +492,54 @@ document.getElementById('preview-share').addEventListener('click', async () => {
 document.addEventListener('touchmove', e => { if (!e.target.closest('#preview-img')) e.preventDefault(); }, { passive: false });
 document.addEventListener('gesturestart', e => e.preventDefault());
 
-window.addEventListener('resize', () => { placeOverlays(); placePops(); });
+/* ---------- 斜角 3D 視角（第一次切換時才載入） ---------- */
+let v3 = null, v3Loading = null;
+// 地板：球場＋螢光筆＋跑位線（球路在 3D 裡畫成空中弧線）
+const floorSvg = () => Board.defs + Board.court(state.mode, true) + scene().marks.map((m, i) =>
+  m.type === 'hl' ? Board.highlight(m, i) : m.kind === 'run' ? Board.arrow(m, i) : '').join('');
+function render3d() {
+  if (!v3) return;
+  v3.update(state, scene(), floorSvg());
+}
+async function ensure3d() {
+  if (v3) return v3;
+  if (!v3Loading) {
+    const tag = document.getElementById('loading3d'); tag.hidden = false;
+    v3Loading = import('./view3d.js?v=7').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
+      .catch(err => { tag.hidden = true; v3Loading = null; console.error(err); alert('斜角畫面載入失敗，請檢查網路後再試一次'); state.view = 'top'; render(); });
+  }
+  return v3Loading;
+}
+/* 斜角畫面：只能拖動人物和羽球（轉方向、畫線回俯瞰做） */
+let drag3d = null;
+function bind3d(v) {
+  const cv = v.canvas;
+  cv.addEventListener('pointerdown', e => {
+    if (drag3d) return;
+    const hit = v.pick(e); if (!hit) return;
+    const obj = hit.kind === 'shuttle' ? scene().shuttle : scene().players.find(p => p.id === hit.id);
+    const h = hit.kind === 'shuttle' ? v.hitHeight() : 0, g = v.groundAt(e, h); if (!g) return;
+    cv.setPointerCapture(e.pointerId);
+    drag3d = { id: e.pointerId, obj, h, ox: obj.x - g.x, oy: obj.y - g.y, before: snap() };
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!drag3d || e.pointerId !== drag3d.id) return;
+    const g = v.groundAt(e, drag3d.h); if (!g) return;
+    drag3d.obj.x = clamp(g.x + drag3d.ox, -0.2, Board.W + 0.2);
+    drag3d.obj.y = clamp(g.y + drag3d.oy, -0.3, Board.L + 0.3);
+    render();
+  });
+  const end = e => { if (!drag3d || e.pointerId !== drag3d.id) return; commit(drag3d.before); drag3d = null; render(); };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+}
+
+document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', async () => {
+  state.view = b.dataset.view; sel = null; state.pop = null;
+  if (state.view === '3d') state.tool = 'move';
+  render();
+  if (state.view === '3d') { await ensure3d(); render(); }
+}));
+
+window.addEventListener('resize', () => { placeOverlays(); placePops(); if (v3 && state.view === '3d') { v3.resize(); render3d(); } });
 
 render();

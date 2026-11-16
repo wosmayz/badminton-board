@@ -15,7 +15,7 @@ const Board = (() => {
   const line = (x1, y1, x2, y2, color, w = LW, extra = '') =>
     `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${w}" ${extra}/>`;
 
-  function court(mode) {
+  function court(mode, noNet) {
     const c = C(), dl = '';   // 單打、雙打場地畫法一樣（她 11/17 決定單打不暗掉兩側）
     let g = `<rect x="-0.6" y="-0.6" width="${W + 1.2}" height="${L + 1.2}" rx="0.18" fill="${c.surround}"/>`;
     g += `<rect x="0" y="0" width="${W}" height="${L}" fill="${c.court}"/>`;
@@ -27,7 +27,8 @@ const Board = (() => {
     g += line(SIDE, 0, SIDE, L, c.line) + line(W - SIDE, 0, W - SIDE, L, c.line);
     g += line(0, NET - SHORT, W, NET - SHORT, c.line) + line(0, NET + SHORT, W, NET + SHORT, c.line);
     g += line(W / 2, 0, W / 2, NET - SHORT, c.line) + line(W / 2, NET + SHORT, W / 2, L, c.line);
-    // 球網＋網柱
+    // 球網＋網柱（斜角畫面有立體球網，地板上就不畫）
+    if (noNet) return g;
     g += line(-0.3, NET, W + 0.3, NET, c.net, 0.07);
     g += `<circle cx="-0.3" cy="${NET}" r="0.07" fill="${c.net}"/><circle cx="${W + 0.3}" cy="${NET}" r="0.07" fill="${c.net}"/>`;
     return g;
