@@ -110,7 +110,7 @@ function toBoard(e) {
 
 /* 球員選單、旋轉角度的位置 */
 function placeOverlays() {
-  if (state.view === '3d') { menu.hidden = true; angleTag.hidden = true; return; }
+  if (state.view === '3d') return placeOverlays3d();
   const t = target(), rotating = drag && drag.type === 'rotate' && drag.started;
   // 選單：選到球員、而且不在旋轉中才出現
   if (t && sel.kind === 'player' && !rotating) {
@@ -131,6 +131,30 @@ function placeOverlays() {
     angleTag.textContent = ((deg % 360) + 360) % 360 + '°';
     angleTag.style.left = c.x + 'px';
     angleTag.style.top = (c.y + ring + 8) + 'px';
+  } else angleTag.hidden = true;
+}
+
+/* 斜角畫面：選單放在頭頂上方、角度標籤放在腳下（用 3D 位置換算到畫面） */
+function placeOverlays3d() {
+  const t = target(), rotating = drag3d && drag3d.type === 'rotate' && drag3d.started;
+  if (!v3 || !t) { menu.hidden = true; angleTag.hidden = true; return; }
+  const H = sel.kind === 'shuttle' ? v3.hitHeight() : v3.personHeight() + .6;
+  const head = v3.screenOf(t.x, t.y, H), feet = v3.screenOf(t.x, t.y, 0);
+  if (sel.kind === 'player' && !rotating) {
+    menu.hidden = false;
+    menu.querySelectorAll('[data-hand]').forEach(b => b.setAttribute('aria-checked', b.dataset.hand === t.hand));
+    const w = menu.offsetWidth, h = menu.offsetHeight, sw = stage.clientWidth, sh = stage.clientHeight;
+    let top = head.y - h - 10;
+    if (top < 4) top = Math.min(feet.y + 24, sh - h - 4);   // 上面放不下就放腳下
+    menu.style.left = Math.min(Math.max(head.x - w / 2, 4), sw - w - 4) + 'px';
+    menu.style.top = top + 'px';
+  } else menu.hidden = true;
+  if (rotating) {
+    const deg = Math.round(sel.kind === 'shuttle' ? t.heading : t.angle);
+    angleTag.hidden = false;
+    angleTag.textContent = ((deg % 360) + 360) % 360 + '°';
+    angleTag.style.left = feet.x + 'px';
+    angleTag.style.top = (feet.y + 26) + 'px';
   } else angleTag.hidden = true;
 }
 
@@ -499,13 +523,13 @@ const floorSvg = () => Board.defs + Board.court(state.mode, true) + scene().mark
   m.type === 'hl' ? Board.highlight(m, i) : m.kind === 'run' ? Board.arrow(m, i) : '').join('');
 function render3d() {
   if (!v3) return;
-  v3.update(state, scene(), floorSvg());
+  v3.update(state, scene(), floorSvg(), sel);
 }
 async function ensure3d() {
   if (v3) return v3;
   if (!v3Loading) {
     const tag = document.getElementById('loading3d'); tag.hidden = false;
-    v3Loading = import('./view3d.js?v=8').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
+    v3Loading = import('./view3d.js?v=10').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
       .catch(err => { tag.hidden = true; v3Loading = null; console.error(err); alert('斜角畫面載入失敗，請檢查網路後再試一次'); state.view = 'top'; render(); });
   }
   return v3Loading;
@@ -526,15 +550,18 @@ function bind3d(v) {
       pinch = two(); return;
     }
     if (fingers.size > 2) return;
-    const hit = v.pick(e);
+    const hit = v.pick(e), base = { id: e.pointerId, sx: e.clientX, sy: e.clientY, hit, started: false, before: snap() };
+    // 已選取：在空白處或在它身上拖＝轉向手指方向（和俯瞰一樣）
+    if (sel && (!hit || same(hit, sel))) { drag3d = { ...base, type: 'rotate' }; return; }
     if (!hit) {
       // 點兩下空白處：回原尺寸
-      const now = Date.now(); if (now - lastTap < 320) { v.resetView(); lastTap = 0; } else lastTap = now;
+      const now = Date.now(); if (now - lastTap < 320) { v.resetView(); placeOverlays(); lastTap = 0; } else lastTap = now;
       return;
     }
+    // 沒選取（或按到別人）：拖＝移動、點＝選取
     const obj = hit.kind === 'shuttle' ? scene().shuttle : scene().players.find(p => p.id === hit.id);
     const h = hit.kind === 'shuttle' ? v.hitHeight() : 0, g = v.groundAt(e, h); if (!g) return;
-    drag3d = { id: e.pointerId, obj, h, ox: obj.x - g.x, oy: obj.y - g.y, before: snap() };
+    drag3d = { ...base, type: 'move', obj, h, ox: obj.x - g.x, oy: obj.y - g.y };
   });
   cv.addEventListener('pointermove', e => {
     if (!fingers.has(e.pointerId)) return;
@@ -543,23 +570,43 @@ function bind3d(v) {
       const now = two();
       v.panBy(pinch.mid, now.mid);
       if (pinch.d > 0) v.zoomAt(now.d / pinch.d, now.mid);
-      pinch = now; return;
+      pinch = now; placeOverlays(); return;
     }
     if (!drag3d || e.pointerId !== drag3d.id) return;
-    const g = v.groundAt(e, drag3d.h); if (!g) return;
-    drag3d.obj.x = clamp(g.x + drag3d.ox, -0.2, Board.W + 0.2);
-    drag3d.obj.y = clamp(g.y + drag3d.oy, -0.3, Board.L + 0.3);
+    if (!drag3d.started) {
+      if (Math.hypot(e.clientX - drag3d.sx, e.clientY - drag3d.sy) < TAP_PX) return;
+      drag3d.started = true;
+      if (drag3d.type === 'move') sel = null;   // 拖別人時，原本選的取消
+    }
+    if (drag3d.type === 'move') {
+      const g = v.groundAt(e, drag3d.h); if (!g) return;
+      drag3d.obj.x = clamp(g.x + drag3d.ox, -0.2, Board.W + 0.2);
+      drag3d.obj.y = clamp(g.y + drag3d.oy, -0.3, Board.L + 0.3);
+    } else {
+      // 轉向：從人（羽球）的位置指向手指在地上的位置
+      const t = target(), g = v.groundAt(e, sel.kind === 'shuttle' ? v.hitHeight() : 0); if (!t || !g) return;
+      const dx = g.x - t.x, dy = g.y - t.y;
+      if (Math.hypot(dx, dy) < MIN_ROT) return;
+      const ang = Math.atan2(dx, -dy) * 180 / Math.PI;
+      if (sel.kind === 'shuttle') t.heading = ang; else t.angle = ang;
+    }
     render();
   });
   const end = e => {
     fingers.delete(e.pointerId);
     if (fingers.size < 2) pinch = null;
     if (!drag3d || e.pointerId !== drag3d.id) return;
-    commit(drag3d.before); drag3d = null; render();
+    const d = drag3d; drag3d = null;
+    if (!d.started) {
+      // 這是一次「點」：點人／球＝選取；點自己＝維持；點空白＝取消（點兩下空白＝回原尺寸，在按下時處理）
+      if (d.type === 'move') sel = d.hit;
+      else if (!d.hit) { sel = null; const now = Date.now(); if (now - lastTap < 320) { v.resetView(); placeOverlays(); lastTap = 0; } else lastTap = now; }
+    }
+    commit(d.before); render();
   };
   cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
   // 電腦：滑鼠滾輪縮放
-  cv.addEventListener('wheel', e => { e.preventDefault(); v.zoomAt(Math.exp(-e.deltaY * .002), e); }, { passive: false });
+  cv.addEventListener('wheel', e => { e.preventDefault(); v.zoomAt(Math.exp(-e.deltaY * .002), e); placeOverlays(); }, { passive: false });
 }
 
 document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', async () => {

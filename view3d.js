@@ -207,7 +207,7 @@ function buildNet() {
 
 /* ---------- 羽球（白色羽毛裙＋軟木球頭），球頭朝 +Z ---------- */
 function buildShuttle() {
-  const g = new THREE.Group(), k = 4.2;   // 放大到約 0.3 公尺長，手機上才看得到（和俯瞰一樣比真實大）
+  const g = new THREE.Group(), k = 6;     // 放大到約 0.42 公尺長（11/17 她要再大一點，原 4.2）
   const skirt = new THREE.Mesh(new THREE.CylinderGeometry(.034 * k, .013 * k, .07 * k, 16, 1, true),
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .7, side: THREE.DoubleSide }));
   skirt.rotation.x = Math.PI / 2; skirt.position.z = -.035 * k; g.add(skirt);
@@ -273,12 +273,23 @@ export async function createView3D(stage) {
   scene.add(buildNet());
 
   const shuttle = buildShuttle(); scene.add(shuttle);
-  const shuttleShadow = new THREE.Mesh(new THREE.CircleGeometry(.14, 24), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: .22, depthWrite: false }));
+  const shuttleShadow = new THREE.Mesh(new THREE.CircleGeometry(.2, 24), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: .22, depthWrite: false }));
   shuttleShadow.rotation.x = -Math.PI / 2; scene.add(shuttleShadow);
   const shots = new THREE.Group(); scene.add(shots);
   const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
-  const shuttleHit = new THREE.Mesh(new THREE.SphereGeometry(.4, 12, 8), hitMat); shuttleHit.userData = { kind: 'shuttle' }; scene.add(shuttleHit);
+  const shuttleHit = new THREE.Mesh(new THREE.SphereGeometry(.5, 12, 8), hitMat); shuttleHit.userData = { kind: 'shuttle' }; scene.add(shuttleHit);
 
+  /* 選取圈：腳下白圈＋尖角指向面對的方向 */
+  const selRing = new THREE.Group(); selRing.visible = false; scene.add(selRing);
+  {
+    const white = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .95, depthWrite: false, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(.92, 1, 48), white); ring.rotation.x = -Math.PI / 2; selRing.add(ring);
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(.92, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .16, depthWrite: false }));
+    fill.rotation.x = -Math.PI / 2; selRing.add(fill);
+    // 尖角：朝 −Z（俯瞰的「上」），整組再依角度轉
+    const tip = new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -1.32), new THREE.Vector3(-.22, 0, -.96), new THREE.Vector3(.22, 0, -.96)]), white);
+    selRing.add(tip);
+  }
   const camera = new THREE.PerspectiveCamera(30, 1, 1.5, 120);   // 近端 1.5m：前後判斷精度比較好
   const people = new Map();   // key → { obj, shadow, badge, sig }
   const shadowMat = new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: .22, depthWrite: false });
@@ -337,7 +348,7 @@ export async function createView3D(stage) {
   }
 
   let floorSig = '';
-  async function update(state, sceneData, floorSvg) {
+  async function update(state, sceneData, floorSvg, sel) {
     // 地板只在內容有變時重畫
     if (floorSvg !== floorSig) { floorSig = floorSvg; await svgTexture(floorSvg, floorTex); }
     const seen = new Set();
@@ -369,6 +380,10 @@ export async function createView3D(stage) {
     shuttleShadow.position.copy(sp).setY(.03);
     shuttleHit.position.copy(sp).setY(HIT_H());
     // 球路：空中弧線（螢光筆、跑位線畫在地板貼圖裡）
+    // 選取圈
+    const t = !sel ? null : sel.kind === 'shuttle' ? { x: sh.x, y: sh.y, a: sh.heading, r: .38 } : (p => p && { x: p.x, y: p.y, a: p.angle, r: .5 * PERSON_H })(sceneData.players.find(p => p.id === sel.id));
+    selRing.visible = !!t;
+    if (t) { selRing.position.copy(toWorld(t.x, t.y)).setY(.035); selRing.scale.setScalar(t.r); selRing.rotation.y = -t.a * Math.PI / 180; }
     shots.children.forEach(c => c.traverse(o => { if (o.geometry) o.geometry.dispose(); }));
     shots.clear();
     sceneData.marks.filter(m => m.type === 'arrow' && m.kind === 'shot').forEach(m => shots.add(shotArc(m, css('--arrow-shot'), camera)));
@@ -425,5 +440,11 @@ export async function createView3D(stage) {
     return out;
   }
 
-  return { canvas, resize, update, pick, groundAt, snapshot, zoomAt, panBy, resetView, isZoomed: () => zoom > 1.01, hitHeight: HIT_H, render: () => renderer.render(scene, camera) };
+  /* 公尺座標＋高度 → 畫面上的位置（像素，相對於畫布左上角）；給選單、角度標籤定位 */
+  function screenOf(x, y, height = 0) {
+    const v = toWorld(x, y).setY(height).project(camera), r = canvas.getBoundingClientRect();
+    return { x: (v.x + 1) / 2 * r.width, y: (1 - v.y) / 2 * r.height };
+  }
+
+  return { canvas, resize, update, pick, screenOf, personHeight: () => PERSON_H, groundAt, snapshot, zoomAt, panBy, resetView, isZoomed: () => zoom > 1.01, hitHeight: HIT_H, render: () => renderer.render(scene, camera) };
 }
