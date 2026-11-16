@@ -415,19 +415,25 @@ document.getElementById('reset-pos').addEventListener('click', () =>
     scene().players = d.players; scene().shuttle = d.shuttle;
   }));
 
-/* ---------- 截圖：只有球場（含場外深綠邊），1080 寬 ---------- */
+/* ---------- 截圖：上方名字＋球場（含場外深綠邊），1080 寬 ---------- */
+const APP_NAME = 'Team YE 羽球戰術板';
 const SHOT_W = 1080, SHOT_BOX = [-0.6, -0.6, Board.W + 1.2, Board.L + 1.2];   // 公尺：剛好是場外深綠那一塊
+const SHOT_HEAD = 120;   // 上方名字那一條的高度（像素）
 function makeShot() {
   const [x, y, w, h] = SHOT_BOX, H = Math.round(SHOT_W * h / w);
   const src = `<svg xmlns="http://www.w3.org/2000/svg" width="${SHOT_W}" height="${H}" viewBox="${x} ${y} ${w} ${h}">${boardSvg(true)}</svg>`;
   return new Promise((ok, fail) => {
     const img = new Image();
     img.onload = () => {
-      const cv = document.createElement('canvas'); cv.width = SHOT_W; cv.height = H;
+      const cv = document.createElement('canvas'); cv.width = SHOT_W; cv.height = SHOT_HEAD + H;
       const ctx = cv.getContext('2d');
       ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surround').trim();
-      ctx.fillRect(0, 0, SHOT_W, H);   // 場外圓角外面也塗滿，不留透明
-      ctx.drawImage(img, 0, 0, SHOT_W, H);
+      ctx.fillRect(0, 0, SHOT_W, SHOT_HEAD + H);   // 整張底色＝場外深綠，名字放在上面這條
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 48px -apple-system, "PingFang TC", "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(APP_NAME, SHOT_W / 2, SHOT_HEAD / 2 + 14);
+      ctx.drawImage(img, 0, SHOT_HEAD, SHOT_W, H);
       cv.toBlob(b => b ? ok(b) : fail(new Error('toBlob')), 'image/png');
     };
     img.onerror = fail;
@@ -435,7 +441,7 @@ function makeShot() {
   });
 }
 const shotName = () => { const d = new Date(), p = n => String(n).padStart(2, '0');
-  return `羽球戰術-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.png`; };
+  return `${APP_NAME}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.png`; };
 
 document.getElementById('shot').addEventListener('click', async () => {
   state.pop = null; placePops();
