@@ -300,8 +300,8 @@ svg.addEventListener('pointermove', e => {
     if (drag.type === 'move') sel = null;   // 拖別人時，原本選的取消
   }
   if (drag.type === 'move') {
-    drag.obj.x = clamp(pt.x + drag.ox, -0.45, Board.W + 0.45);
-    drag.obj.y = clamp(pt.y + drag.oy, -0.45, Board.L + 0.45);
+    drag.obj.x = clamp(pt.x + drag.ox, -0.2, Board.W + 0.2);   // 不拖出畫面（球場已滿版）
+    drag.obj.y = clamp(pt.y + drag.oy, -0.3, Board.L + 0.3);
     render();
   } else if (drag.type === 'rotate') {
     const t = target(), dx = pt.x - t.x, dy = pt.y - t.y, d = Math.hypot(dx, dy);
@@ -443,24 +443,42 @@ function makeShot() {
 const shotName = () => { const d = new Date(), p = n => String(n).padStart(2, '0');
   return `${APP_NAME}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.png`; };
 
+/* 按截圖：先出預覽，看過再決定存相簿或傳 LINE */
+const preview = document.getElementById('preview'), previewImg = document.getElementById('preview-img');
+let shotFile = null;
+const canShareFile = f => !!(navigator.canShare && navigator.canShare({ files: [f] }));
 document.getElementById('shot').addEventListener('click', async () => {
-  state.pop = null; placePops();
+  state.pop = null; sel = null; render();
   try {
-    const file = new File([await makeShot()], shotName(), { type: 'image/png' });
-    // iPhone／iPad：分享面板（存相簿、傳 LINE）；不支援的瀏覽器：直接下載
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file] }); }
-      catch (err) { if (err.name !== 'AbortError') throw err; }   // 自己關掉分享面板不算錯
-    } else {
-      const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    }
+    shotFile = new File([await makeShot()], shotName(), { type: 'image/png' });
+    if (previewImg.src) URL.revokeObjectURL(previewImg.src);
+    previewImg.src = URL.createObjectURL(shotFile);
+    const share = canShareFile(shotFile);
+    // 能分享（iPhone／iPad）：分享面板裡有「儲存影像」和 LINE；不能分享（電腦）：直接下載
+    document.getElementById('preview-share').textContent = share ? '存相簿／傳 LINE' : '下載圖片';
+    document.getElementById('preview-hint').hidden = !share;
+    preview.hidden = false;
   } catch (err) {
     alert('截圖失敗，請再試一次');
     console.error(err);
   }
 });
+document.getElementById('preview-close').addEventListener('click', () => { preview.hidden = true; });
+document.getElementById('preview-share').addEventListener('click', async () => {
+  const file = shotFile; if (!file) return;
+  if (canShareFile(file)) {
+    try { await navigator.share({ files: [file] }); }
+    catch (err) { if (err.name !== 'AbortError') alert('分享失敗：可以長按圖片，選「加入照片」'); }   // 自己關掉分享面板不算錯
+  } else {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+});
+
+/* 整頁不讓手指捲動或縮放（預覽圖片除外，要能長按存相簿） */
+document.addEventListener('touchmove', e => { if (!e.target.closest('#preview-img')) e.preventDefault(); }, { passive: false });
+document.addEventListener('gesturestart', e => e.preventDefault());
 
 window.addEventListener('resize', () => { placeOverlays(); placePops(); });
 

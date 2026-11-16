@@ -9,7 +9,7 @@ const Board = (() => {
 
   /* 場地尺寸（公尺） */
   const W = 6.1, L = 13.4, NET = 6.7, SHORT = 1.98, SIDE = 0.46, LONG_D = 0.76, LW = 0.04;
-  const PLAYER_R = 0.385;   // 人物大小（設計系統 70%）
+  const PLAYER_R = 0.44;    // 人物大小（11/17 她手機試覺得手指一按就看不到 → 由 0.385 放大約 15%；羽球跟著放大）
   const SKIN = '#F2C9A6', HAIR = '#3A2E29';
 
   const line = (x1, y1, x2, y2, color, w = LW, extra = '') =>

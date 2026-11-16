@@ -7,12 +7,18 @@
 <meta name="theme-color" content="#f4f5f4">
 <title>Team YE 羽球戰術板</title>
 <meta name="apple-mobile-web-app-title" content="Team YE 戰術板">
-<link rel="stylesheet" href="styles.css?v=2">
+<script>
+  // 從 LINE 打開：改用 Safari 開（LINE 內建瀏覽器往下拖會關掉網頁，分享面板也不穩）
+  if (/\bLine\//i.test(navigator.userAgent) && !/openExternalBrowser=1/.test(location.search)) {
+    location.replace(location.pathname + (location.search ? location.search + '&' : '?') + 'openExternalBrowser=1' + location.hash);
+  }
+</script>
+<link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
 <div class="app">
   <main class="stage">
-    <svg id="board" viewBox="-0.75 -0.75 7.6 14.9" preserveAspectRatio="xMidYMid meet" aria-label="Team YE 羽球戰術板 球場"></svg>
+    <svg id="board" viewBox="-0.38 -0.45 6.86 14.3" preserveAspectRatio="xMidYMid meet" aria-label="Team YE 羽球戰術板 球場"></svg>
     <div class="pmenu" id="pmenu" hidden>
       <div class="pmenu-head"><span>持拍手</span><span>拖曳＝旋轉</span></div>
       <div class="seg2" role="radiogroup" aria-label="持拍手">
@@ -62,6 +68,14 @@
       <div class="dlg-btns"><button id="dlg-cancel">取消</button><button id="dlg-ok" class="danger"></button></div>
     </div>
   </div>
+  <div class="dialog-back" id="preview" hidden>
+    <div class="dialog preview">
+      <h2>截圖預覽</h2>
+      <img id="preview-img" alt="截圖預覽">
+      <p class="dlg-hint" id="preview-hint">也可以長按圖片，選「加入照片」</p>
+      <div class="dlg-btns"><button id="preview-close">關閉</button><button id="preview-share" class="primary">存相簿／傳 LINE</button></div>
+    </div>
+  </div>
   <div class="pop" id="pop-arrow" hidden>
     <div class="kinds" role="radiogroup" aria-label="箭頭種類">
       <button role="radio" data-kind="shot" aria-checked="true"><svg viewBox="0 0 64 16"><path d="M4 8h48"/><path d="M50 3l8 5-8 5z" class="head"/></svg><span>球路（實線）</span></button>
@@ -69,7 +83,7 @@
     </div>
   </div>
 </div>
-<script src="board.js?v=2"></script>
-<script src="main.js?v=2"></script>
+<script src="board.js?v=3"></script>
+<script src="main.js?v=3"></script>
 </body>
 </html>

@@ -50,6 +50,8 @@
 * { box-sizing: border-box; }
 html, body {
   margin: 0; height: 100%;
+  position: fixed; inset: 0; width: 100%;   /* 整頁鎖住：手指拖曳時網頁不會跟著滑 */
+  touch-action: none;
   background: var(--surface);
   color: var(--text);
   font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
@@ -63,9 +65,9 @@ button { font: inherit; color: inherit; border: 0; background: none; padding: 0;
 
 /* ===== 版面：左邊球場、右邊工具列 ===== */
 .app {
-  position: relative; display: flex; gap: var(--sp-2);
+  position: relative; display: flex; gap: var(--sp-1);   /* 球場盡量滿版：左邊貼齊螢幕、右邊貼近工具列 */
   height: 100vh; height: 100dvh;
-  padding: calc(env(safe-area-inset-top) + var(--sp-1)) calc(env(safe-area-inset-right) + var(--sp-2)) calc(env(safe-area-inset-bottom) + var(--sp-1)) calc(env(safe-area-inset-left) + var(--sp-2));
+  padding: calc(env(safe-area-inset-top) + var(--sp-1)) calc(env(safe-area-inset-right) + var(--sp-1)) calc(env(safe-area-inset-bottom) + var(--sp-1)) env(safe-area-inset-left);
 }
 .stage { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; }
 #board { width: 100%; height: 100%; display: block; touch-action: none; }
@@ -157,3 +159,11 @@ button { font: inherit; color: inherit; border: 0; background: none; padding: 0;
 .dlg-btns { display: flex; gap: var(--sp-3); margin-top: var(--sp-6); }
 .dlg-btns button { flex: 1; height: 44px; border-radius: 999px; font-size: var(--fs-body); background: var(--seg-bg); color: var(--text); }
 .dlg-btns .danger { background: var(--active); color: var(--active-text); font-weight: 700; }
+
+/* ===== 截圖預覽 ===== */
+.dialog.preview { max-width: 340px; padding-top: var(--sp-4); }
+.dialog.preview img { display: block; width: auto; max-width: 100%; max-height: 58vh; max-height: 58dvh; margin: var(--sp-3) auto 0; border-radius: var(--r-sm); box-shadow: var(--shadow);
+  -webkit-touch-callout: default; touch-action: auto; }   /* 圖片要能長按存相簿 */
+.dialog.preview .dlg-hint { margin-top: var(--sp-2); }
+.dialog.preview .dlg-btns { margin-top: var(--sp-4); }
+.dlg-btns .primary { background: var(--primary); color: var(--primary-text); font-weight: 700; }
