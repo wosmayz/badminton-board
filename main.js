@@ -505,32 +505,61 @@ async function ensure3d() {
   if (v3) return v3;
   if (!v3Loading) {
     const tag = document.getElementById('loading3d'); tag.hidden = false;
-    v3Loading = import('./view3d.js?v=7').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
+    v3Loading = import('./view3d.js?v=8').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
       .catch(err => { tag.hidden = true; v3Loading = null; console.error(err); alert('斜角畫面載入失敗，請檢查網路後再試一次'); state.view = 'top'; render(); });
   }
   return v3Loading;
 }
-/* 斜角畫面：只能拖動人物和羽球（轉方向、畫線回俯瞰做） */
+/* 斜角畫面：單指拖人物、羽球；兩指捏＝放大縮小、兩指拖＝移動畫面；點兩下空白處＝回原尺寸
+   （轉方向、畫線回俯瞰做） */
 let drag3d = null;
 function bind3d(v) {
-  const cv = v.canvas;
+  const cv = v.canvas, fingers = new Map();
+  let pinch = null, lastTap = 0;
+  const two = () => { const [a, b] = [...fingers.values()]; return { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), mid: { clientX: (a.clientX + b.clientX) / 2, clientY: (a.clientY + b.clientY) / 2 } }; };
   cv.addEventListener('pointerdown', e => {
-    if (drag3d) return;
-    const hit = v.pick(e); if (!hit) return;
+    cv.setPointerCapture(e.pointerId);
+    fingers.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
+    if (fingers.size === 2) {
+      // 第二根手指放下：改成縮放／移動，正在拖的人放回原位
+      if (drag3d) { state.scenes[state.mode] = JSON.parse(drag3d.before); drag3d = null; render(); }
+      pinch = two(); return;
+    }
+    if (fingers.size > 2) return;
+    const hit = v.pick(e);
+    if (!hit) {
+      // 點兩下空白處：回原尺寸
+      const now = Date.now(); if (now - lastTap < 320) { v.resetView(); lastTap = 0; } else lastTap = now;
+      return;
+    }
     const obj = hit.kind === 'shuttle' ? scene().shuttle : scene().players.find(p => p.id === hit.id);
     const h = hit.kind === 'shuttle' ? v.hitHeight() : 0, g = v.groundAt(e, h); if (!g) return;
-    cv.setPointerCapture(e.pointerId);
     drag3d = { id: e.pointerId, obj, h, ox: obj.x - g.x, oy: obj.y - g.y, before: snap() };
   });
   cv.addEventListener('pointermove', e => {
+    if (!fingers.has(e.pointerId)) return;
+    fingers.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
+    if (pinch && fingers.size === 2) {
+      const now = two();
+      v.panBy(pinch.mid, now.mid);
+      if (pinch.d > 0) v.zoomAt(now.d / pinch.d, now.mid);
+      pinch = now; return;
+    }
     if (!drag3d || e.pointerId !== drag3d.id) return;
     const g = v.groundAt(e, drag3d.h); if (!g) return;
     drag3d.obj.x = clamp(g.x + drag3d.ox, -0.2, Board.W + 0.2);
     drag3d.obj.y = clamp(g.y + drag3d.oy, -0.3, Board.L + 0.3);
     render();
   });
-  const end = e => { if (!drag3d || e.pointerId !== drag3d.id) return; commit(drag3d.before); drag3d = null; render(); };
+  const end = e => {
+    fingers.delete(e.pointerId);
+    if (fingers.size < 2) pinch = null;
+    if (!drag3d || e.pointerId !== drag3d.id) return;
+    commit(drag3d.before); drag3d = null; render();
+  };
   cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+  // 電腦：滑鼠滾輪縮放
+  cv.addEventListener('wheel', e => { e.preventDefault(); v.zoomAt(Math.exp(-e.deltaY * .002), e); }, { passive: false });
 }
 
 document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', async () => {

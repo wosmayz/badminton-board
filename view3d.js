@@ -211,8 +211,6 @@ function buildShuttle() {
   const skirt = new THREE.Mesh(new THREE.CylinderGeometry(.034 * k, .013 * k, .07 * k, 16, 1, true),
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .7, side: THREE.DoubleSide }));
   skirt.rotation.x = Math.PI / 2; skirt.position.z = -.035 * k; g.add(skirt);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(.034 * k, .003 * k, 6, 24), new THREE.MeshStandardMaterial({ color: 0x9a9a9a }));
-  rim.position.z = -.07 * k; g.add(rim);
   const band = new THREE.Mesh(new THREE.CylinderGeometry(.0135 * k, .0135 * k, .008 * k, 16), new THREE.MeshStandardMaterial({ color: 0x3a3a3a }));
   band.rotation.x = Math.PI / 2; band.position.z = .002 * k; g.add(band);
   const cork = new THREE.Mesh(new THREE.SphereGeometry(.0135 * k, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xe9dcc6, roughness: .9 }));
@@ -241,7 +239,7 @@ function shotArc(m, color, camera) {
   const tri = new THREE.BufferGeometry().setFromPoints([tip, back.clone().add(side), back.clone().sub(side)]);
   g.add(new THREE.Mesh(tri, mat));
   // 地上的淡影子：看得出球路落在哪裡
-  const flat = []; for (let i = 0; i <= 20; i++) { const p = curve.getPoint(i / 20); flat.push(new THREE.Vector3(p.x, .01, p.z)); }
+  const flat = []; for (let i = 0; i <= 20; i++) { const p = curve.getPoint(i / 20); flat.push(new THREE.Vector3(p.x, .04, p.z)); }
   g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(flat), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: .25 })));
   return g;
 }
@@ -268,8 +266,10 @@ export async function createView3D(stage) {
   floor.rotation.x = -Math.PI / 2; floor.position.set(FLOOR_BOX[0] + FLOOR_BOX[2] / 2 - W / 2, 0, FLOOR_BOX[1] + FLOOR_BOX[3] / 2 - L / 2);
   scene.add(floor);
   // 場外深綠延伸到整個畫面（球場四周不留灰色空白）
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ color: new THREE.Color(css('--surround')) }));
-  ground.rotation.x = -Math.PI / 2; ground.position.y = -0.002; scene.add(ground);
+  // 手機顯示晶片的前後判斷精度較低：兩層地板太靠近會一塊塊互相蓋掉（11/17 iPhone 破圖）
+  // → 深綠底層不參與前後判斷、永遠最先畫，球場地板再蓋上去
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ color: new THREE.Color(css('--surround')), depthWrite: false, depthTest: false }));
+  ground.rotation.x = -Math.PI / 2; ground.position.y = -0.05; ground.renderOrder = -10; scene.add(ground);
   scene.add(buildNet());
 
   const shuttle = buildShuttle(); scene.add(shuttle);
@@ -279,7 +279,7 @@ export async function createView3D(stage) {
   const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
   const shuttleHit = new THREE.Mesh(new THREE.SphereGeometry(.4, 12, 8), hitMat); shuttleHit.userData = { kind: 'shuttle' }; scene.add(shuttleHit);
 
-  const camera = new THREE.PerspectiveCamera(30, 1, .1, 200);
+  const camera = new THREE.PerspectiveCamera(30, 1, 1.5, 120);   // 近端 1.5m：前後判斷精度比較好
   const people = new Map();   // key → { obj, shadow, badge, sig }
   const shadowMat = new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: .22, depthWrite: false });
 
@@ -297,8 +297,37 @@ export async function createView3D(stage) {
       const fits = corners.every(p => { const v = p.clone().project(camera); return Math.abs(v.x) <= .98 && Math.abs(v.y) <= .98; });
       if (fits) hi = d; else lo = d;
     }
-    camera.position.copy(AIM).addScaledVector(dir, hi); camera.lookAt(AIM); camera.updateProjectionMatrix();
+    baseDist = hi; applyView();
   }
+
+  /* 放大／移動：zoom 1～3 倍、pan＝看的中心點往哪裡移（公尺） */
+  let baseDist = 20, zoom = 1;
+  const pan = new THREE.Vector3(), DIR = new THREE.Vector3(0, Math.sin(ELEV), Math.cos(ELEV));
+  function applyView() {
+    const at = AIM.clone().add(pan);
+    camera.position.copy(at).addScaledVector(DIR, baseDist / zoom); camera.lookAt(at);
+    camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+  }
+  const clampPan = () => {
+    const lim = (1 - 1 / zoom);   // 放越大，能移越遠；原尺寸時不能移
+    pan.x = Math.max(-(W / 2 + .5) * lim, Math.min((W / 2 + .5) * lim, pan.x));
+    pan.z = Math.max(-(L / 2 + .5) * lim, Math.min((L / 2 + .5) * lim, pan.z));
+  };
+  const groundVec = e => { const g = groundAt(e); return g && toWorld(g.x, g.y); };
+  /* 以手指位置為中心縮放：手指下的那一點不動 */
+  function zoomAt(f, e) {
+    const before = groundVec(e);
+    zoom = Math.max(1, Math.min(3, zoom * f)); applyView();
+    const after = groundVec(e);
+    if (before && after) pan.add(before.sub(after));
+    clampPan(); applyView(); renderer.render(scene, camera);
+  }
+  /* 兩指拖：畫面跟著手指走 */
+  function panBy(from, to) {
+    const a = groundVec(from), b = groundVec(to);
+    if (a && b) { pan.add(a.sub(b)); clampPan(); applyView(); renderer.render(scene, camera); }
+  }
+  function resetView() { zoom = 1; pan.set(0, 0, 0); applyView(); renderer.render(scene, camera); }
 
   function resize() {
     const r = stage.getBoundingClientRect();
@@ -327,7 +356,7 @@ export async function createView3D(stage) {
       }
       const at = toWorld(p.x, p.y);
       e.obj.position.copy(at); e.obj.rotation.y = Math.PI - p.angle * Math.PI / 180;
-      e.shadow.position.copy(at).setY(.005);
+      e.shadow.position.copy(at).setY(.03);
       e.badge.position.copy(at).setY(PERSON_H + .32);
       e.hit.position.copy(at).setY(PERSON_H * .7);
       seen.add(key);
@@ -337,7 +366,7 @@ export async function createView3D(stage) {
     const sh = sceneData.shuttle, sp = toWorld(sh.x, sh.y);
     shuttle.position.copy(sp).setY(HIT_H());
     shuttle.rotation.set(0, Math.PI - sh.heading * Math.PI / 180, 0);
-    shuttleShadow.position.copy(sp).setY(.006);
+    shuttleShadow.position.copy(sp).setY(.03);
     shuttleHit.position.copy(sp).setY(HIT_H());
     // 球路：空中弧線（螢光筆、跑位線畫在地板貼圖裡）
     shots.children.forEach(c => c.traverse(o => { if (o.geometry) o.geometry.dispose(); }));
@@ -371,7 +400,18 @@ export async function createView3D(stage) {
   /* 截圖：寬 w 重畫一張，上下裁到只剩球場（留一點邊），畫完恢復原本大小
      回傳的圖多帶 courtTop＝遠端底線在圖上的高度（名字要置中在它上面） */
   function snapshot(w) {
-    const old = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio(), h = w * 2;
+    const old = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio();
+    if (zoom > 1.01) {   // 放大中：照畫面看到的截（同樣的長寬比例）
+      const h = Math.round(w * old.y / old.x);
+      renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+      renderer.render(scene, camera);
+      const out = document.createElement('canvas'); out.width = w; out.height = h; out.getContext('2d').drawImage(canvas, 0, 0);
+      out.courtTop = 0;
+      renderer.setPixelRatio(pr); renderer.setSize(old.x, old.y, false); camera.aspect = old.x / old.y; camera.updateProjectionMatrix();
+      renderer.render(scene, camera);
+      return out;
+    }
+    const h = w * 2;
     renderer.setPixelRatio(1); renderer.setSize(w, h, false); fitCamera(w, h);
     renderer.render(scene, camera);
     const py = p => (1 - p.clone().project(camera).y) / 2 * h;
@@ -385,5 +425,5 @@ export async function createView3D(stage) {
     return out;
   }
 
-  return { canvas, resize, update, pick, groundAt, snapshot, hitHeight: HIT_H, render: () => renderer.render(scene, camera) };
+  return { canvas, resize, update, pick, groundAt, snapshot, zoomAt, panBy, resetView, isZoomed: () => zoom > 1.01, hitHeight: HIT_H, render: () => renderer.render(scene, camera) };
 }
