@@ -1,0 +1,159 @@
+/* ===== 設計系統（定案：配色 1 球場綠）=====
+   所有顏色只在這裡定義，畫面和球場繪圖都從這裡讀。
+   括號內是色階代號（由 OKLCH 換算，見 線框/draft-kit.js）。 */
+:root {
+  /* 場地 */
+  --court: #398659;          /* 綠 600 */
+  --surround: #1c5132;       /* 綠 800 */
+  --net: #0f3720;            /* 綠 900 */
+  --court-line: #ffffff;     /* 白 */
+  /* 隊伍 */
+  --team-a: #3e89f7;         /* 藍 500 */
+  --team-a-dark: #114287;    /* 藍 800 */
+  --team-b: #de6200;         /* 橘 500 */
+  --team-b-dark: #772900;    /* 橘 800 */
+  /* 螢光筆 */
+  --hl-1: #e7d48f;           /* 黃 200 */
+  --hl-2: #f89dc9;           /* 粉 300 */
+  --hl-3: #a1e1e9;           /* 青 200 */
+  --arrow: #ffffff;          /* 白：跑位箭頭 */
+  --arrow-shot: #ed4952;     /* 紅 500：球路箭頭 */
+  --sel-ring: #ffffff;       /* 白：選取光圈 */
+  /* 介面 */
+  --surface: #f4f5f4;        /* 灰綠 50 */
+  --rail: #e6e9e7;           /* 灰綠 100 */
+  --rail-text: #58605a;      /* 灰綠 700 */
+  --active: #414743;         /* 灰綠 800 */
+  --active-text: #ffffff;
+  --primary: #398659;        /* 綠 600 */
+  --primary-text: #ffffff;
+  --text: #2b2f2c;           /* 灰綠 900 */
+  --text-sub: #858f88;       /* 灰綠 500 */
+  --seg-bg: #d1d6d2;         /* 灰綠 200 */
+  --seg-knob: #ffffff;
+  --menu: #ffffff;
+
+  /* 字級（只用 4 種） */
+  --fs-title: 17px;
+  --fs-body: 15px;
+  --fs-item: 13px;
+  --fs-label: 11px;
+
+  /* 間距（4 的倍數）、圓角 */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-6: 24px;
+  --r-sm: 10px; --r-md: 14px; --r-lg: 20px;
+
+  --rail-w: 64px;
+  --shadow: 0 2px 10px rgba(0, 0, 0, .18);
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%;
+  background: var(--surface);
+  color: var(--text);
+  font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+
+/* ===== 版面：左邊球場、右邊工具列 ===== */
+.app {
+  position: relative; display: flex; gap: var(--sp-2);
+  height: 100vh; height: 100dvh;
+  padding: calc(env(safe-area-inset-top) + var(--sp-1)) calc(env(safe-area-inset-right) + var(--sp-2)) calc(env(safe-area-inset-bottom) + var(--sp-1)) calc(env(safe-area-inset-left) + var(--sp-2));
+}
+.stage { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; }
+#board { width: 100%; height: 100%; display: block; touch-action: none; }
+
+/* ===== 右側工具列 ===== */
+.rail {
+  width: var(--rail-w); flex: none;
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: 6px 5px;
+  background: var(--rail); border-radius: var(--r-lg);
+}
+.tool {
+  height: 56px; border-radius: var(--r-md);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  color: var(--rail-text); font-size: var(--fs-label);
+}
+.tool[aria-pressed="true"] { background: var(--active); color: var(--active-text); font-weight: 700; }
+.tool.primary { background: var(--primary); color: var(--primary-text); font-weight: 700; }
+.tool svg, .icon-btn svg { width: 20px; height: 20px; }
+
+.divider { height: 1px; margin: 6px 9px; background: var(--rail-text); opacity: .25; }
+.icon-btn { height: 44px; border-radius: var(--r-md); display: flex; align-items: center; justify-content: center; color: var(--rail-text); }
+.icon-btn:disabled { opacity: .3; cursor: default; }
+.spacer { flex: 1; }
+
+/* 單雙打切換（上下兩格） */
+.seg { display: flex; flex-direction: column; gap: 3px; padding: 3px; margin: 0 2px var(--sp-1); background: var(--seg-bg); border-radius: var(--r-md); }
+.seg button { height: 36px; border-radius: 11px; font-size: 12px; color: var(--text-sub); }
+.seg button[aria-checked="true"] { background: var(--seg-knob); color: var(--text); font-weight: 700; box-shadow: var(--shadow); }
+
+/* 按下去的回饋 */
+.tool:active, .icon-btn:not(:disabled):active, .seg button:active { transform: scale(.94); }
+
+/* ===== 球員選單（選取時出現在人物上方）===== */
+.pmenu {
+  position: absolute; width: 196px; padding: var(--sp-3);
+  background: var(--menu); border-radius: var(--r-md); box-shadow: var(--shadow);
+}
+.pmenu[hidden] { display: none; }
+.pmenu-head { display: flex; justify-content: space-between; margin-bottom: var(--sp-2); font-size: var(--fs-label); color: var(--text-sub); }
+.pmenu .seg2 { display: flex; gap: 3px; padding: 3px; background: var(--seg-bg); border-radius: 999px; }
+.pmenu .seg2 button { flex: 1; height: 30px; border-radius: 999px; font-size: var(--fs-item); color: var(--text-sub); }
+.pmenu .seg2 button[aria-checked="true"] { background: var(--seg-knob); color: var(--text); font-weight: 700; box-shadow: var(--shadow); }
+
+/* 旋轉中的角度 */
+.angle-tag {
+  position: absolute; transform: translate(-50%, 0); padding: var(--sp-1) var(--sp-3);
+  background: rgba(20, 24, 21, .8); color: #fff; border-radius: 999px;
+  font-size: var(--fs-item); font-weight: 700; pointer-events: none;
+}
+.angle-tag[hidden] { display: none; }
+
+/* ===== 螢光筆／箭頭選單（工具列左邊）===== */
+.pop {
+  position: absolute; z-index: 5; width: 196px; padding: var(--sp-3);
+  background: var(--menu); border-radius: var(--r-md); box-shadow: var(--shadow);
+}
+.pop[hidden] { display: none; }
+.swatches { display: flex; justify-content: space-around; }
+.swatches button { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.swatches i { width: 34px; height: 34px; border-radius: 50%; }
+.swatches button[aria-checked="true"] { box-shadow: inset 0 0 0 2.5px var(--text); }
+.pop-line { height: 1px; margin: var(--sp-3) 0; background: var(--text-sub); opacity: .3; }
+.switch-row { display: flex; align-items: center; justify-content: space-between; font-size: var(--fs-item); }
+[role="switch"] { width: 46px; height: 28px; border-radius: 14px; background: var(--seg-bg); position: relative; transition: background .2s; }
+[role="switch"] i { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: var(--shadow); transition: transform .2s; }
+[role="switch"][aria-checked="true"] { background: var(--primary); }
+[role="switch"][aria-checked="true"] i { transform: translateX(18px); }
+.kinds { display: flex; gap: var(--sp-2); }
+.kinds button { flex: 1; padding: var(--sp-2) var(--sp-1); border-radius: var(--r-sm); display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); font-size: var(--fs-label); color: var(--text-sub); }
+.kinds button[aria-checked="true"] { background: var(--seg-bg); color: var(--text); font-weight: 700; }
+.kinds svg { width: 64px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.kinds svg .head { fill: currentColor; stroke: none; }
+.kinds [data-kind="shot"] svg { color: var(--arrow-shot); }
+
+/* ===== 更多選單 ===== */
+.pop-menu { width: 180px; padding: var(--sp-1) 0; }
+.pop-menu > button { display: block; width: 100%; height: 48px; padding: 0 var(--sp-4); text-align: left; font-size: var(--fs-body); color: var(--text); }
+.pop-menu > button:active { background: var(--rail); }
+.pop-menu .pop-line { margin: 0 var(--sp-3); }
+
+/* ===== 確認視窗 ===== */
+.dialog-back { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: var(--sp-6); background: rgba(0, 0, 0, .35); }
+.dialog-back[hidden] { display: none; }
+.dialog { width: 100%; max-width: 300px; padding: var(--sp-6) var(--sp-4) var(--sp-4); background: var(--menu); border-radius: var(--r-lg); box-shadow: var(--shadow); text-align: center; }
+.dialog h2 { margin: 0 0 var(--sp-2); font-size: var(--fs-title); font-weight: 700; }
+.dialog p { margin: 0; font-size: var(--fs-body); color: var(--text-sub); line-height: 1.45; }
+.dialog .dlg-hint { margin-top: var(--sp-1); font-size: var(--fs-item); }
+.dlg-btns { display: flex; gap: var(--sp-3); margin-top: var(--sp-6); }
+.dlg-btns button { flex: 1; height: 44px; border-radius: 999px; font-size: var(--fs-body); background: var(--seg-bg); color: var(--text); }
+.dlg-btns .danger { background: var(--active); color: var(--active-text); font-weight: 700; }
