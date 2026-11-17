@@ -64,6 +64,16 @@ const Board = (() => {
     return s;
   }
 
+  /* 量一串字的筆畫中心：回傳「從左下起點到筆畫中心」的距離（以字級為 1） */
+  const inkCache = {};
+  function inkCenter(txt) {
+    if (inkCache[txt]) return inkCache[txt];
+    const x = document.createElement('canvas').getContext('2d');
+    x.font = "800 100px -apple-system,'PingFang TC',sans-serif"; x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    const m = x.measureText(txt);
+    return (inkCache[txt] = { dx: (m.actualBoundingBoxRight - m.actualBoundingBoxLeft) / 200, dy: (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 200 });
+  }
+
   /* p = { id, team:'A'|'B', x, y, angle, hand:'R'|'L' } */
   function player(p, sel) {
     const c = C()[p.team], r = PLAYER_R, sd = p.hand === 'R' ? 1 : -1;
@@ -73,7 +83,9 @@ const Board = (() => {
     g += `<g transform="translate(${p.x},${p.y}) rotate(${p.angle})">${qPlayer(r, c, sd)}</g>`;
     const a = p.angle * Math.PI / 180, bx = p.x - Math.sin(a) * r, by = p.y + Math.cos(a) * r, br = r * .42;
     g += `<circle cx="${bx}" cy="${by}" r="${br}" fill="${c.dark}" stroke="#fff" stroke-width="${r * .08}"/>`;
-    g += `<text x="${bx}" y="${by}" font-size="${br * .95}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-weight="800" font-family="-apple-system,'PingFang TC',sans-serif">${p.id}</text>`;
+    // 文字置中：量字實際筆畫的範圍，把筆畫中心對準圓心（不靠字型的基準線，各字型都準）
+    const fs = br * .95, k = inkCenter(p.id);
+    g += `<text x="${bx - k.dx * fs}" y="${by + k.dy * fs}" font-size="${fs}" fill="#fff" font-weight="800" font-family="-apple-system,'PingFang TC',sans-serif">${p.id}</text>`;
     return g + '</g>';
   }
 

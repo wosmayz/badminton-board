@@ -113,7 +113,9 @@ function numberPlate(txt) {
 function badge(txt, dark) {
   const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
   x.beginPath(); x.arc(64, 64, 56, 0, Math.PI * 2); x.fillStyle = dark; x.fill(); x.lineWidth = 9; x.strokeStyle = '#fff'; x.stroke();
-  x.fillStyle = '#fff'; x.font = '800 54px -apple-system,"PingFang TC",sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(txt, 64, 68);
+  x.fillStyle = '#fff'; x.font = '800 54px -apple-system,"PingFang TC",sans-serif'; x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+  const m = x.measureText(txt);   // 量筆畫範圍，把筆畫中心對準圓心
+  x.fillText(txt, 64 - (m.actualBoundingBoxRight - m.actualBoundingBoxLeft) / 2, 64 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false })); s.renderOrder = 10;
   s.scale.setScalar(.12 + .17 * PERSON_H); return s;
