@@ -8,6 +8,8 @@
 <title>Team YE 羽球戰術板</title>
 <meta name="apple-mobile-web-app-title" content="Team YE 戰術板">
 <script>
+  // 舊網址（GitHub）→ 正式網址（11/17 換）
+  if (/github\.io$/.test(location.hostname)) location.replace('https://teamye-bmt-board.web.app/' + location.search + location.hash);
   // 從 LINE 打開：改用 Safari 開（LINE 內建瀏覽器往下拖會關掉網頁，分享面板也不穩）
   if (/\bLine\//i.test(navigator.userAgent) && !/openExternalBrowser=1/.test(location.search)) {
     location.replace(location.pathname + (location.search ? location.search + '&' : '?') + 'openExternalBrowser=1' + location.hash);
