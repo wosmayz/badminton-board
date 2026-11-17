@@ -181,49 +181,6 @@ const LOOP_MIN = 2.0;      // 太短的線不算圈
 const ARROW_MIN = 0.4;     // 箭頭太短就當作手滑，不留
 const SHUTTLE_GAP = 0.4;   // 球路從羽球中心往外這麼遠才開始畫（羽球半徑約 0.3）
 const PEN_FOLLOW = 0.45;   // 螢光筆防手抖：越小越平滑、越跟不上手指
-/* 放開後再整理一次筆畫：抹平抖動（移動平均）→ 去掉細碎點（RDP 簡化）→ 把轉角磨圓（Chaikin） */
-function smoothStroke(pts) {
-  if (pts.length < 4) return pts;
-  const simplify = (a, eps) => {
-    if (a.length < 3) return a;
-    const [x1, y1] = a[0], [x2, y2] = a[a.length - 1], L = Math.hypot(x2 - x1, y2 - y1) || 1e-9;
-    let far = 0, idx = 0;
-    for (let k = 1; k < a.length - 1; k++) {
-      const d = Math.abs((x2 - x1) * (y1 - a[k][1]) - (x1 - a[k][0]) * (y2 - y1)) / L;
-      if (d > far) { far = d; idx = k; }
-    }
-    return far <= eps ? [a[0], a[a.length - 1]] : simplify(a.slice(0, idx + 1), eps).slice(0, -1).concat(simplify(a.slice(idx), eps));
-  };
-  // 先做移動平均把抖動抹平（頭尾不動，線才不會縮短）
-  let avg = pts;
-  for (let r = 0; r < 3; r++) avg = avg.map((p, k) => {
-    if (k === 0 || k === avg.length - 1) return p;
-    const w = Math.min(3, k, avg.length - 1 - k); let x = 0, y = 0;
-    for (let j = -w; j <= w; j++) { x += avg[k + j][0]; y += avg[k + j][1]; }
-    return [x / (2 * w + 1), y / (2 * w + 1)];
-  });
-  let out = simplify(avg, 0.05);
-  for (let r = 0; r < 2; r++) {
-    const nx = [out[0]];
-    for (let k = 0; k < out.length - 1; k++) {
-      const [ax, ay] = out[k], [bx, by] = out[k + 1];
-      nx.push([ax * .75 + bx * .25, ay * .75 + by * .25], [ax * .25 + bx * .75, ay * .25 + by * .75]);
-    }
-    nx.push(out[out.length - 1]); out = nx;
-  }
-  return out;
-}
-/* 圈起來的形狀：頭尾相連一起平均，接縫不會凸一塊 */
-function smoothLoop(pts) {
-  const n = pts.length; if (n < 8) return pts;
-  let a = pts;
-  for (let r = 0; r < 3; r++) a = a.map((_, k) => {
-    let x = 0, y = 0;
-    for (let j = -3; j <= 3; j++) { const q = a[(k + j + n) % n]; x += q[0]; y += q[1]; }
-    return [x / 7, y / 7];
-  });
-  return a;
-}
 const HOLD_MS = 450;       // 在羽球上按住這麼久（亮黃圈）再拉＝拉出球路
 
 /* 畫圈自動填滿：這一筆自己頭尾接起來，或和同顏色的其他筆（最多 4 筆）頭尾相接成一圈 */
@@ -405,9 +362,7 @@ function endDrag(e) {
     if ((!d.started && d.hit) || hitTap) { marks.splice(marks.indexOf(d.mark), 1); goMove(d.hit); }
     else {
       const end = toBoard(e); d.mark.pts.push([end.x, end.y]);   // 筆尖補到手指放開的位置
-      d.mark.pts = smoothStroke(d.mark.pts);
       if (state.autoFill) closeLoop(d.mark);
-      if (d.mark.closed) d.mark.pts = smoothLoop(d.mark.pts);   // 圈起來的頭尾接縫也抹平
     }
   } else if (d.type === 'arrow') {
     if ((!d.mark && d.hit) || hitTap) { if (d.mark) marks.splice(marks.indexOf(d.mark), 1); goMove(d.hit); }
@@ -582,7 +537,7 @@ async function ensure3d() {
   if (v3) return v3;
   if (!v3Loading) {
     const tag = document.getElementById('loading3d'); tag.hidden = false;
-    v3Loading = import('./view3d.js?v=14').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
+    v3Loading = import('./view3d.js?v=15').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
       .catch(err => { tag.hidden = true; v3Loading = null; console.error(err); alert('斜角畫面載入失敗，請檢查網路後再試一次'); state.view = 'top'; render(); });
   }
   return v3Loading;
