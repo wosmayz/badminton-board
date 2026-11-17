@@ -54,6 +54,8 @@ let dragBefore = null;
 // drag：正在進行中的手指動作
 let sel = null, drag = null;
 const TAP_PX = 6;          // 手指移動超過這麼多像素才算「拖」，不然算「點」
+const TAP_HIT_PX = 14;     // 其他工具下點人物／羽球：手指晃動在這範圍內、又放得快，仍算「點」（手機手指會晃）
+const TAP_HIT_MS = 400;
 const ROT_PER_PX = 1.1;     // 俯瞰／斜角：左右拖 1 像素轉幾度（拖約半個螢幕寬＝轉半圈）
 
 const target = () => !sel ? null : sel.kind === 'shuttle' ? scene().shuttle : scene().players.find(p => p.id === sel.id);
@@ -236,7 +238,7 @@ svg.addEventListener('pointerdown', e => {
   if (state.pop) { state.pop = null; placePops(); }
   dragBefore = snap();
   const pt = toBoard(e), P = [pt.x, pt.y], hit = hitTest(e);
-  const base = { id: e.pointerId, sx: e.clientX, sy: e.clientY, hit };
+  const base = { id: e.pointerId, sx: e.clientX, sy: e.clientY, hit, t0: performance.now(), far: 0 };
   svg.setPointerCapture(e.pointerId);
 
   // ---- 羽球：每個工具都一樣 ----
@@ -284,10 +286,11 @@ svg.addEventListener('pointerdown', e => {
 
 svg.addEventListener('pointermove', e => {
   if (!drag || e.pointerId !== drag.id) return;
+  drag.far = Math.max(drag.far || 0, Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy));
   const pt = toBoard(e), P = [pt.x, pt.y];
 
   if (drag.type === 'shuttle') {
-    if (!moved(drag, e)) return;
+    if (drag.far < (drag.armed ? TAP_PX : TAP_HIT_PX)) return;
     clearTimeout(drag.timer);
     const sh = scene().shuttle;
     if (drag.armed) drag = startShotFromShuttle(drag);
@@ -346,19 +349,21 @@ function endDrag(e) {
   const d = drag; drag = null;
   clearTimeout(d.timer);
   const marks = scene().marks;
+  // 在其他工具下點人物／羽球：手指稍微晃到也算點（不留下短線，直接回到移動並選取）
+  const hitTap = d.hit && d.far < TAP_HIT_PX && performance.now() - d.t0 < TAP_HIT_MS;
   if (d.type === 'shuttle') {
     // 沒拖動就放開：點一下或長按後放開都當作「點」
     goMove(d.hit);
   } else if (d.type === 'pen') {
-    if (!d.started && d.hit) { marks.splice(marks.indexOf(d.mark), 1); goMove(d.hit); }
+    if ((!d.started && d.hit) || hitTap) { marks.splice(marks.indexOf(d.mark), 1); goMove(d.hit); }
     else {
       if (state.autoFill) closeLoop(d.mark);
     }
   } else if (d.type === 'arrow') {
-    if (!d.mark && d.hit) goMove(d.hit);
+    if ((!d.mark && d.hit) || hitTap) { if (d.mark) marks.splice(marks.indexOf(d.mark), 1); goMove(d.hit); }
     else if (d.mark && dist(d.mark.s, d.mark.e) < ARROW_MIN) marks.splice(marks.indexOf(d.mark), 1);
   } else if (d.type === 'erase') {
-    if (!d.started && !d.erased && d.hit) goMove(d.hit);   // 人物腳下沒有線可擦＝回到移動
+    if ((!d.started || hitTap) && !d.erased && d.hit) goMove(d.hit);   // 人物腳下沒有線可擦＝回到移動
   } else if (!d.started) {
     // 移動工具的「點」
     if (d.type === 'move') sel = d.hit;                       // 點人＝選取
@@ -409,8 +414,8 @@ document.querySelectorAll('[data-icon]').forEach(el => {
 document.querySelectorAll('.tool[data-tool]').forEach(b => b.addEventListener('click', () => {
   const t = b.dataset.tool, hasPop = t === 'pen' || t === 'arrow';
   if (t !== 'move' && state.view === '3d') state.view = 'top';   // 畫線、擦線回俯瞰做
-  // 換到螢光筆／箭頭時打開選單；已經是這個工具時再按一次＝開關選單
-  state.pop = !hasPop ? null : state.tool === t ? (state.pop === t ? null : t) : t;
+  // 換到螢光筆／箭頭時不跳選單；已經是這個工具時再按一次＝開關選單
+  state.pop = hasPop && state.tool === t && state.pop !== t ? t : null;
   state.tool = t; sel = null; render();
 }));
 document.querySelectorAll('.seg [data-mode]').forEach(b => b.addEventListener('click', () => { state.mode = b.dataset.mode; sel = null; render(); }));
@@ -527,7 +532,7 @@ async function ensure3d() {
   if (v3) return v3;
   if (!v3Loading) {
     const tag = document.getElementById('loading3d'); tag.hidden = false;
-    v3Loading = import('./view3d.js?v=12').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
+    v3Loading = import('./view3d.js?v=13').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
       .catch(err => { tag.hidden = true; v3Loading = null; console.error(err); alert('斜角畫面載入失敗，請檢查網路後再試一次'); state.view = 'top'; render(); });
   }
   return v3Loading;
