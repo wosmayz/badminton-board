@@ -109,8 +109,18 @@ const Board = (() => {
      箭頭   { type:'arrow', kind:'shot'|'run', s:[x,y], c:[x,y], e:[x,y] }（二次曲線：起點、彎度控制點、終點） */
   const HL_W = 0.4, ARROW_W = 0.07, HEAD_L = 0.3, HEAD_W = 0.26;
 
+  /* 點連成平滑曲線：經過每兩點中間，原本的點當彎曲的控制點 */
+  function smoothPath(pts, closed) {
+    const f = p => p[0].toFixed(3) + ',' + p[1].toFixed(3);
+    if (pts.length < 3) return 'M' + pts.map(f).join(' L') + (closed ? 'Z' : '');
+    const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    let d = 'M' + f(pts[0]);
+    for (let k = 1; k < pts.length - 1; k++) d += ' Q' + f(pts[k]) + ' ' + f(mid(pts[k], pts[k + 1]));
+    return d + ' L' + f(pts[pts.length - 1]) + (closed ? 'Z' : '');
+  }
+
   function highlight(m, i) {
-    const col = css('--' + m.color), d = m.pts.map((p, k) => (k ? 'L' : 'M') + p[0].toFixed(3) + ',' + p[1].toFixed(3)).join(' ') + (m.closed ? 'Z' : '');
+    const col = css('--' + m.color), d = smoothPath(m.pts, m.closed);
     // 整筆一起半透明：同一筆自己交疊的地方不會變深
     return `<g class="mark" data-i="${i}" opacity=".65"><path d="${d}" fill="${m.closed ? col : 'none'}" stroke="${col}" stroke-width="${HL_W}" stroke-linecap="round" stroke-linejoin="round"/></g>`;
   }
