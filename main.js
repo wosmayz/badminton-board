@@ -537,7 +537,7 @@ async function ensure3d() {
   if (v3) return v3;
   if (!v3Loading) {
     const tag = document.getElementById('loading3d'); tag.hidden = false;
-    v3Loading = import('./view3d.js?v=15').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
+    v3Loading = import('./view3d.js?v=16').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
       .catch(err => { tag.hidden = true; v3Loading = null; console.error(err); alert('斜角畫面載入失敗，請檢查網路後再試一次'); state.view = 'top'; render(); });
   }
   return v3Loading;
@@ -561,6 +561,13 @@ function bind3d(v) {
     }
     if (fingers.size > 2) return;
     const hit = v.pick(e), base = { id: e.pointerId, sx: e.clientX, sy: e.clientY, hit, started: false, before: snap() };
+    // 按在場地（球場邊線）以外的地方拖＝轉鏡頭角度（點兩下＝回原本角度）
+    const g0 = v.groundAt(e);
+    if (!hit && (!g0 || g0.x < 0 || g0.x > Board.W || g0.y < 0 || g0.y > Board.L)) {
+      const now = Date.now(); if (now - lastTap < 320) { v.resetView(); render(); lastTap = 0; return; }
+      lastTap = now;
+      drag3d = { ...base, type: 'orbit', lx: e.clientX, ly: e.clientY }; return;
+    }
     // 已選取：在空白處或在它身上拖＝轉向手指方向（和俯瞰一樣）
     if (sel && (!hit || same(hit, sel))) { drag3d = { ...base, type: 'rotate' }; return; }
     if (!hit) {
@@ -588,7 +595,11 @@ function bind3d(v) {
       drag3d.started = true;
       if (drag3d.type === 'move') sel = null;   // 拖別人時，原本選的取消
     }
-    if (drag3d.type === 'move') {
+    if (drag3d.type === 'orbit') {
+      v.orbitBy(e.clientX - drag3d.lx, e.clientY - drag3d.ly);
+      drag3d.lx = e.clientX; drag3d.ly = e.clientY;
+      render(); return;   // 球路箭頭的尖端要重新面向鏡頭，所以整個重畫
+    } else if (drag3d.type === 'move') {
       const g = v.groundAt(e, drag3d.h); if (!g) return;
       drag3d.obj.x = clamp(g.x + drag3d.ox, -0.2, Board.W + 0.2);
       drag3d.obj.y = clamp(g.y + drag3d.oy, -0.3, Board.L + 0.3);
@@ -606,6 +617,7 @@ function bind3d(v) {
     if (fingers.size < 2) pinch = null;
     if (!drag3d || e.pointerId !== drag3d.id) return;
     const d = drag3d; drag3d = null;
+    if (d.type === 'orbit') { if (!d.started) sel = null; render(); return; }   // 轉鏡頭不記入上一步
     if (!d.started) {
       // 這是一次「點」：點人／球＝選取；點自己＝維持；點空白＝取消（點兩下空白＝回原尺寸，在按下時處理）
       if (d.type === 'move') sel = d.hit;

@@ -270,6 +270,7 @@ export async function createView3D(stage) {
   // → 深綠底層不參與前後判斷、永遠最先畫，球場地板再蓋上去
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ color: new THREE.Color(css('--surround')), depthWrite: false, depthTest: false }));
   ground.rotation.x = -Math.PI / 2; ground.position.y = -0.05; ground.renderOrder = -10; scene.add(ground);
+  scene.background = new THREE.Color(css('--surround'));   // 轉到低角度時，地平線以上也是場外深綠（不露出灰色網頁底）
   scene.add(buildNet());
 
   const shuttle = buildShuttle(); scene.add(shuttle);
@@ -296,27 +297,41 @@ export async function createView3D(stage) {
 
   /* 鏡頭：從我方底線後上方斜看，仰角 ELEV；距離自動調到整個球場剛好放得進畫面 */
   const ELEV = 52 * Math.PI / 180, AIM = new THREE.Vector3(0, 0.4, 0.3);
-  function fitCamera(w, h) {
-    camera.aspect = w / h;
+  /* 轉鏡頭：yaw＝繞著球場轉（0＝我方底線後面）、elev＝鏡頭高低（仰角） */
+  let yaw = 0, elev = ELEV;
+  const ELEV_MIN = 12 * Math.PI / 180, ELEV_MAX = 89 * Math.PI / 180;
+  const dirOf = (yw, el) => new THREE.Vector3(Math.sin(yw) * Math.cos(el), Math.sin(el), Math.cos(yw) * Math.cos(el));
+  /* 在某個角度下，鏡頭要多遠整個球場才放得進畫面 */
+  function fitDist(yw, el) {
     const corners = [[-0.5, -0.6], [W + 0.5, -0.6], [-0.5, L + 0.6], [W + 0.5, L + 0.6]].map(([x, y]) => toWorld(x, y));
-    corners.push(toWorld(0, 0).setY(2.4), toWorld(W, 0).setY(2.4));   // 遠端人物的頭也要放得進
-    const dir = new THREE.Vector3(0, Math.sin(ELEV), Math.cos(ELEV));
+    [[0, 0], [W, 0], [0, L], [W, L]].forEach(([x, y]) => corners.push(toWorld(x, y).setY(2.4)));   // 人物的頭也要放得進
+    const dir = dirOf(yw, el);
     let lo = 5, hi = 80;
     for (let k = 0; k < 30; k++) {
       const d = (lo + hi) / 2;
       camera.position.copy(AIM).addScaledVector(dir, d); camera.lookAt(AIM); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
-      const fits = corners.every(p => { const v = p.clone().project(camera); return Math.abs(v.x) <= .98 && Math.abs(v.y) <= .98; });
+      const fits = corners.every(p => { const v = p.clone().project(camera); return v.z < 1 && Math.abs(v.x) <= .98 && Math.abs(v.y) <= .98; });
       if (fits) hi = d; else lo = d;
     }
-    baseDist = hi; applyView();
+    return hi;
+  }
+  function fitCamera(w, h) {
+    camera.aspect = w / h;
+    baseDist = fitDist(yaw, elev); applyView();
+  }
+  /* 轉鏡頭：dx、dy＝手指移動幾像素 */
+  function orbitBy(dx, dy) {
+    yaw -= dx * 0.006;
+    elev = Math.max(ELEV_MIN, Math.min(ELEV_MAX, elev + dy * 0.005));
+    baseDist = fitDist(yaw, elev); applyView();
   }
 
   /* 放大／移動：zoom 1～3 倍、pan＝看的中心點往哪裡移（公尺） */
   let baseDist = 20, zoom = 1;
-  const pan = new THREE.Vector3(), DIR = new THREE.Vector3(0, Math.sin(ELEV), Math.cos(ELEV));
+  const pan = new THREE.Vector3();
   function applyView() {
     const at = AIM.clone().add(pan);
-    camera.position.copy(at).addScaledVector(DIR, baseDist / zoom); camera.lookAt(at);
+    camera.position.copy(at).addScaledVector(dirOf(yaw, elev), baseDist / zoom); camera.lookAt(at);
     camera.updateProjectionMatrix(); camera.updateMatrixWorld();
   }
   const clampPan = () => {
@@ -338,7 +353,8 @@ export async function createView3D(stage) {
     const a = groundVec(from), b = groundVec(to);
     if (a && b) { pan.add(a.sub(b)); clampPan(); applyView(); renderer.render(scene, camera); }
   }
-  function resetView() { zoom = 1; pan.set(0, 0, 0); applyView(); renderer.render(scene, camera); }
+  function resetView() { zoom = 1; pan.set(0, 0, 0); yaw = 0; elev = ELEV; baseDist = fitDist(yaw, elev); applyView(); renderer.render(scene, camera); }
+  const isTurned = () => Math.abs(yaw) > 1e-3 || Math.abs(elev - ELEV) > 1e-3;
 
   function resize() {
     const r = stage.getBoundingClientRect();
@@ -416,7 +432,7 @@ export async function createView3D(stage) {
      回傳的圖多帶 courtTop＝遠端底線在圖上的高度（名字要置中在它上面） */
   function snapshot(w) {
     const old = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio();
-    if (zoom > 1.01) {   // 放大中：照畫面看到的截（同樣的長寬比例）
+    if (zoom > 1.01 || isTurned()) {   // 放大中或轉過鏡頭：照畫面看到的截（同樣的長寬比例）
       const h = Math.round(w * old.y / old.x);
       renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
       renderer.render(scene, camera);
@@ -427,7 +443,7 @@ export async function createView3D(stage) {
       return out;
     }
     const h = w * 2;
-    renderer.setPixelRatio(1); renderer.setSize(w, h, false); fitCamera(w, h);
+    renderer.setPixelRatio(1); renderer.setSize(w, h, false); fitCamera(w, h);   // 原角度：重新對準整個球場再裁
     renderer.render(scene, camera);
     const py = p => (1 - p.clone().project(camera).y) / 2 * h;
     const farLine = py(toWorld(0, 0)), heads = py(toWorld(0, 0).setY(PERSON_H + .6)), near = py(toWorld(0, L + 0.6));
@@ -446,5 +462,5 @@ export async function createView3D(stage) {
     return { x: (v.x + 1) / 2 * r.width, y: (1 - v.y) / 2 * r.height };
   }
 
-  return { canvas, resize, update, pick, screenOf, personHeight: () => PERSON_H, groundAt, snapshot, zoomAt, panBy, resetView, isZoomed: () => zoom > 1.01, hitHeight: HIT_H, render: () => renderer.render(scene, camera) };
+  return { canvas, resize, update, pick, screenOf, personHeight: () => PERSON_H, groundAt, snapshot, zoomAt, panBy, orbitBy, resetView, isZoomed: () => zoom > 1.01 || isTurned(), hitHeight: HIT_H, render: () => renderer.render(scene, camera) };
 }
