@@ -54,8 +54,7 @@ let dragBefore = null;
 // drag：正在進行中的手指動作
 let sel = null, drag = null;
 const TAP_PX = 6;          // 手指移動超過這麼多像素才算「拖」，不然算「點」
-const ROT_PER_PX = 1.1;     // 斜角畫面：左右拖 1 像素轉幾度（拖約半個螢幕寬＝轉半圈）
-const MIN_ROT = 0.25;      // 手指離中心太近（公尺）時不轉，避免亂跳
+const ROT_PER_PX = 1.1;     // 俯瞰／斜角：左右拖 1 像素轉幾度（拖約半個螢幕寬＝轉半圈）
 
 const target = () => !sel ? null : sel.kind === 'shuttle' ? scene().shuttle : scene().players.find(p => p.id === sel.id);
 
@@ -78,7 +77,7 @@ function boardSvg(clean) {
   if (on && drag && ((drag.type === 'arrow' && drag.fromShuttle) || (drag.type === 'shuttle' && drag.armed))) g += Board.glow(s.shuttle.x, s.shuttle.y);
   if (on && drag && drag.type === 'rotate' && drag.started) {
     const t = target(), ang = sel.kind === 'shuttle' ? t.heading : t.angle;
-    g += Board.rotateGuide(t.x, t.y, ang, Math.max(drag.dist, Board.PLAYER_R * 2.4));
+    g += Board.rotateGuide(t.x, t.y, ang, Board.PLAYER_R * 2.4);
   }
   return g;
 }
@@ -273,7 +272,7 @@ svg.addEventListener('pointerdown', e => {
   // ---- 移動工具 ----
   if (sel && (!hit || same(hit, sel))) {
     // 已選取：在空白處或在它身上拖＝旋轉
-    drag = { ...base, type: 'rotate', started: false, dist: 0 };
+    drag = { ...base, type: 'rotate', started: false };
   } else if (hit) {
     // 沒選取（或按到別人）：拖＝移動、點＝選取
     const obj = scene().players.find(p => p.id === hit.id);
@@ -334,12 +333,10 @@ svg.addEventListener('pointermove', e => {
     drag.obj.y = clamp(pt.y + drag.oy, -0.3, Board.L + 0.3);
     render();
   } else if (drag.type === 'rotate') {
-    const t = target(), dx = pt.x - t.x, dy = pt.y - t.y, d = Math.hypot(dx, dy);
-    drag.dist = d;
-    if (d >= MIN_ROT) {
-      const ang = Math.atan2(dx, -dy) * 180 / Math.PI;   // 0＝朝上，順時針
-      if (sel.kind === 'shuttle') t.heading = ang; else t.angle = ang;
-    }
+    // 轉向：以原本的方向為準，跟著手指左右拖來轉（往右拖＝往右轉），和斜角一致
+    const t = target(), key = sel.kind === 'shuttle' ? 'heading' : 'angle';
+    if (drag.a0 == null) drag.a0 = t[key];
+    t[key] = drag.a0 + (e.clientX - drag.sx) * ROT_PER_PX;
     render();
   }
 });
@@ -530,7 +527,7 @@ async function ensure3d() {
   if (v3) return v3;
   if (!v3Loading) {
     const tag = document.getElementById('loading3d'); tag.hidden = false;
-    v3Loading = import('./view3d.js?v=11').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
+    v3Loading = import('./view3d.js?v=12').then(m => m.createView3D(stage)).then(v => { v3 = v; bind3d(v); v.resize(); tag.hidden = true; return v; })
       .catch(err => { tag.hidden = true; v3Loading = null; console.error(err); alert('斜角畫面載入失敗，請檢查網路後再試一次'); state.view = 'top'; render(); });
   }
   return v3Loading;
